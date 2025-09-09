@@ -11,7 +11,19 @@ interface ChatRequest {
   messages: Message[];
 }
 
-async function getPrompts() {
+interface DeepSeekResponse {
+  choices?: Array<{
+    delta?: {
+      content?: string;
+    };
+  }>;
+}
+
+interface StreamChunk {
+  content: string;
+}
+
+async function getPrompts(): Promise<{ userPrompt: string; systemPrompt: string }> {
   const userPromptPath = path.join(process.cwd(), 'userPrompt.txt');
   const systemPromptPath = path.join(process.cwd(), 'systemPrompt.txt');
   
@@ -52,7 +64,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'DEEPSEEK_API_KEY is not configured' }, { status: 500 });
     }
 
-    const requestMessages = [];
+    const requestMessages: Message[] = [];
     
     if (systemPrompt) {
       requestMessages.push({
@@ -64,7 +76,7 @@ export async function POST(req: NextRequest) {
     requestMessages.push(...messages);
 
     if (userPrompt && requestMessages[requestMessages.length - 1]?.role === 'user') {
-      const lastUserMessage = requestMessages[requestMessages.length - 1];
+      const lastUserMessage = requestMessages[requestMessages.length - 1] as Message;
       lastUserMessage.content = `${lastUserMessage.content}`;
     }
 
@@ -118,11 +130,12 @@ export async function POST(req: NextRequest) {
                 }
 
                 try {
-                  const parsed = JSON.parse(data);
+                  const parsed: DeepSeekResponse = JSON.parse(data);
                   const content = parsed.choices?.[0]?.delta?.content;
                   
                   if (content) {
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
+                    const chunk: StreamChunk = { content };
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
                   }
                 } catch (e) {
                   console.warn('Failed to parse chunk:', data);
